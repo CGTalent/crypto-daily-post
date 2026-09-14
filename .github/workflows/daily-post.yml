@@ -1,0 +1,24 @@
+name: Daily Crypto Market Post
+
+# Fires at 06:00 and 07:00 UTC. The post.py script itself checks UK local
+# time and only sends when it is 07:00 UK (06:00 UTC in summer, 07:00 UTC in
+# winter), so the post always goes out at 7 AM UK time, all year round.
+on:
+  schedule:
+    - cron: "0 6,7 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the daily crypto post
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # "1" lets a manual test run fire outside 7 AM; scheduled runs stay at 7 AM UK.
+          ALLOW_ANY_HOUR: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+        run: python3 post.py

@@ -147,8 +147,6 @@ def send_telegram(text):
 
 
 def main():
-    print("secrets:", {k: (len(os.environ.get(k, "")) if os.environ.get(k) else None) for k in
-                        ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "OPENROUTER_API_KEY")}, flush=True)
     # Post only at 07:00 UK time. The workflow fires at 06:00 + 07:00 UTC;
     # whichever lands on a 07:00 UK hour does the send, so it's DST-safe.
     allow_any = os.environ.get("ALLOW_ANY_HOUR") == "1"
@@ -158,13 +156,9 @@ def main():
             print(f"Not 7 AM UK (hour={uk_hour}); skipping.")
             return
     fng_val, fng_label = get_fng()
-    print("stage: fng ok", flush=True)
     btc, eth = get_prices()
-    print("stage: prices ok", flush=True)
     movers = get_movers()
-    print("stage: movers ok", flush=True)
     headlines = get_news_headlines()
-    print(f"stage: news ok ({len(headlines)} headlines)", flush=True)
     if not headlines:
         headlines = ["No fresh headline available; keep the story section general but honest."]
 
@@ -177,9 +171,8 @@ def main():
         "movers": movers,
     }
     post = call_llm(market, headlines, fng_label)
-    print("stage: llm ok", flush=True)
     msg_id = send_telegram(post)
-    print(f"OK sent, message_id={msg_id}", flush=True)
+    print(f"OK sent, message_id={msg_id}")
 
 
 if __name__ == "__main__":

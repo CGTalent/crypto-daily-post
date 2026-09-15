@@ -103,13 +103,14 @@ def call_llm(market_blob, headlines, fng_label):
         "\U0001F680 \U0001F440 \U0001F525 \U000026A1). Body structure: punchy hook line, "
         "Fear & Greed reading with a one-line plain meaning, BTC and ETH price+change, "
         "one or two movers, ONE interesting recent story (2-3 sentences, concrete), "
-        "a light closing line or question. Conversational, feels like a friend. Keep under "
+        "and a brief, simple closing line that just summarises the state of the market "
+        "or the day ahead. Conversational, feels like a friend. Keep under "
         "~130 words (excluding the header). Never invent numbers; use only the data given. "
         "Fill in today's date in the Date: header line. IMPORTANT — stay strictly "
         "neutral and never sound like you are promoting or recommending any specific "
         "crypto or giving buy/sell advice. Do NOT name a single coin as something to "
-        "buy, load up on, or chase. The closing line must be market-level, not coin-pushing "
-        "e.g. 'What's the wider market up to this week?' - never 'Are we loading up on X?'. "
+        "buy, load up on, or chase. Do NOT ask questions or invite replies anywhere in the "
+        "post — this is a pure update/snapshot, not a hook for comments. "
         "Use plain hyphens (-), never em-dashes (—), throughout the entire post."
     )
     user = (

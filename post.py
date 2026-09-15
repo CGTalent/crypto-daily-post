@@ -100,7 +100,9 @@ def call_llm(market_blob, headlines, fng_label):
                 "\U0001F680 <b>Today's Crypto News: Plain &amp; Simple</b> \U0001F4C8\n"
                 "Your daily update on the digital markets\n"
                 "Date: [today's date, e.g. Monday 15 September 2026]\n"
-                "Follow with a blank line, then the post body. Plain English, no jargon "
+                "Follow with a blank line, then the post body with a CLEAR BLANK LINE between "
+        "every paragraph (each of: hook, Fear & Greed, Bitcoin/Ethereum, story, closing "
+        "line) so the post breathes. Plain English, no jargon "
                                 "(explain terms briefly). Use a healthy but not overloaded number of fun "
                                 "emojis (roughly 8-12 across the whole post, on-brand: \U0001F9E9 \U0001F4C8 "
                                 "\U0001F680 \U0001F440 \U0001F525 \U000026A1 \U0001F30C \U0001F4B0 \U0001F4B9 \U0001F511), "
@@ -202,6 +204,10 @@ def main():
     post = call_llm(market, headlines, fng_label)
     # Guarantee the ==== frame top and bottom, whatever the LLM wrote.
     post = post.strip("\n").strip()
+    # Normalise spacing: blank line between every paragraph.
+    import re
+    post = re.sub(r"\n{3,}", "\n\n", post)   # collapse 3+ newlines to one blank line
+    post = re.sub(r"([^\n])\n([^\n])", "\1\n\n\2", post)  # ensure single newlines become paragraph breaks
     post = "====" + "\n" + post + "\n" + "===="
     msg_id = send_telegram(post)
     print(f"OK sent, message_id={msg_id}")

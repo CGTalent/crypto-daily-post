@@ -105,7 +105,11 @@ def call_llm(market_blob, headlines, fng_label):
         "one or two movers, ONE interesting recent story (2-3 sentences, concrete), "
         "a light closing line or question. Conversational, feels like a friend. Keep under "
         "~130 words (excluding the header). Never invent numbers; use only the data given. "
-        "Fill in today's date in the Date: header line."
+        "Fill in today's date in the Date: header line. IMPORTANT — stay strictly "
+        "neutral and never sound like you are promoting or recommending any specific "
+        "crypto or giving buy/sell advice. Do NOT name a single coin as something to "
+        "buy, load up on, or chase. The closing line must be market-level, not coin-pushing "
+        "e.g. 'What's the wider market up to this week?' — never 'Are we loading up on X?'."
     )
     user = (
         f"Today: {today}. Fear & Greed: {market_blob['fng']['value']} "

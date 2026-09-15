@@ -97,7 +97,7 @@ def call_llm(market_blob, headlines, fng_label):
                 "lines (title line, then subhead line, then date line), the title in "
                 "HTML bold and flanked by emojis on both sides:\n"
                 "====\n"
-                "\U0001F680 <b>Crypto Today, Plain &amp; Simple</b> \U0001F4C8\n"
+                "\U0001F680 <b>Today's Crypto News: Plain &amp; Simple</b> \U0001F4C8\n"
                 "Your daily update on the digital markets\n"
                 "Date: [today's date, e.g. Monday 15 September 2026]\n"
                 "Follow with a blank line, then the post body. Plain English, no jargon "
@@ -111,7 +111,11 @@ def call_llm(market_blob, headlines, fng_label):
         "one or two movers, ONE interesting recent story (2-3 sentences, concrete), "
         "and a brief, simple closing line that just summarises the state of the market "
         "or the day ahead. End the post with a final separator line of four equal "
-        "signs (====) on its own line after the closing sentence. Conversational, feels like a friend. Keep under "
+        "signs (====) on its own line after the closing sentence. Then, as the FINAL "
+        "line of the body (before the closing ====), add a single wrap-up line that "
+        "opens with 'That's today's snapshot' and sums up the overall market mood in "
+        "one simple line, e.g. 'That's today's snapshot of the digital markets. "
+        "Overall: a calm, slightly positive market.' Conversational, feels like a friend. Keep under "
         "~130 words (excluding the header). Never invent numbers; use only the data given. "
         "Fill in today's date in the Date: header line. IMPORTANT — stay strictly "
         "neutral and never sound like you are promoting or recommending any specific "
@@ -195,6 +199,9 @@ def main():
         "movers": movers,
     }
     post = call_llm(market, headlines, fng_label)
+    # Guarantee the ==== frame top and bottom, whatever the LLM wrote.
+    post = post.strip("\n").strip()
+    post = "====" + "\n" + post + "\n" + "===="
     msg_id = send_telegram(post)
     print(f"OK sent, message_id={msg_id}")
 

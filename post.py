@@ -111,6 +111,10 @@ def call_llm(market_blob, headlines, fng_label):
         "crypto or giving buy/sell advice. Do NOT name a single coin as something to "
         "buy, load up on, or chase. Do NOT ask questions or invite replies anywhere in the "
         "post — this is a pure update/snapshot, not a hook for comments. "
+        "Never assume the reader knows jargon or specific terms: if you name anything that "
+        "might be unfamiliar (e.g. the Clarity Act, FOMC, a regulation, an index), briefly "
+        "explain what it is right there in simple English (e.g. not just FOMC, but 'the "
+        "FOMC, the Fed's rate-setting committee'). "
         "Use plain hyphens (-), never em-dashes (—), throughout the entire post."
     )
     user = (

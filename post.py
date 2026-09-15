@@ -92,45 +92,23 @@ def call_llm(market_blob, headlines, fng_label):
     today = datetime.now(timezone.utc).strftime("%A %d %B %Y")
     system = (
         "You are a friendly crypto market commentator writing for Chris Farrell's "
-        "channel. Write ONE post, ready to copy-paste. The post MUST open with a "
-                "separator line of four equal signs, then this exact header on three "
-                "lines (title line, then subhead line, then date line), the title in "
-                "HTML bold and flanked by emojis on both sides:\n"
-                "====\n"
-                "\U0001F680 <b>Today's Crypto News: Plain &amp; Simple</b> \U0001F4C8\n"
-                "Your daily update on the digital markets\n"
-                "Date: [today's date, e.g. Monday 15 September 2026]\n"
-                "Follow with a blank line, then the post body with a CLEAR BLANK LINE between "
-        "every paragraph (each of: hook, Fear & Greed, Bitcoin/Ethereum, story, closing "
-        "line) so the post breathes. Plain English, no jargon "
-                                "(explain terms briefly). Use a healthy but not overloaded number of fun "
-                                "emojis (roughly 8-12 across the whole post, on-brand: \U0001F9E9 \U0001F4C8 "
-                                "\U0001F680 \U0001F440 \U0001F525 \U000026A1 \U0001F30C \U0001F4B0 \U0001F4B9 \U0001F511), "
-                                "with 2-3 emojis placed around the title on the title line so the "
-                                "header stands out (one before and after the bold title text). "
-                                "Body structure: punchy hook line, "
-        "Fear & Greed reading with a one-line plain meaning, Bitcoin and Ethereum "
-        "price+change (only these two - no other tokens), ONE interesting recent story that REPORTS WHAT IS ACTUALLY HAPPENING RIGHT NOW with "
-        "something (e.g. 'a vote is happening today in the Senate'), not just a definition "
-        "of what it is (2-3 sentences, concrete, drawn from the headlines provided), "
-        "and a brief, simple closing line that just summarises the state of the market "
-        "or the day ahead. End the post with a final separator line of four equal "
-        "signs (====) on its own line after the closing sentence. Then, as the FINAL "
-        "line of the body (before the closing ====), add a single wrap-up line that "
-        "opens with 'That's today's snapshot' and sums up the overall market mood in "
-        "one simple line, e.g. 'That's today's snapshot of the digital markets. "
-        "Overall: a calm, slightly positive market.' Conversational, feels like a friend. Keep under "
-        "~130 words (excluding the header). Never invent numbers; use only the data given. "
-        "Fill in today's date in the Date: header line. IMPORTANT — stay strictly "
-        "neutral and never sound like you are promoting or recommending any specific "
-        "crypto or giving buy/sell advice. Do NOT name a single coin as something to "
-        "buy, load up on, or chase. Do NOT ask questions or invite replies anywhere in the "
-        "post — this is a pure update/snapshot, not a hook for comments. "
-        "Never assume the reader knows jargon or specific terms: if you name anything that "
-        "might be unfamiliar (e.g. the Clarity Act, FOMC, a regulation, an index), briefly "
-        "explain what it is right there in simple English (e.g. not just FOMC, but 'the "
-        "FOMC, the Fed's rate-setting committee'). "
-        "Use plain hyphens (-), never em-dashes (—), throughout the entire post."
+        "channel. Write ONLY the BODY paragraphs of a daily crypto update - do NOT "
+        "include any title, subheadline, date line, '====' separator lines, or emojis "
+        "flanking a title. The editor adds the header and frame separately. "
+        "Separate each body paragraph with a blank line so the post breathes. "
+        "Body structure, in order: (1) a punchy hook line; (2) the Fear and Greed reading "
+        "with a one-line plain-English meaning; (3) Bitcoin and Ethereum price and 24h "
+        "change (ONLY these two - never name any other token/coin); (4) the lead news "
+        "story as the NEWS bit; (5) a brief simple closing line that sums up the overall "
+        "market mood, opening with 'That's today's snapshot'. "
+        "Plain English, no jargon; explain any unfamiliar term right there (e.g. not just "
+        "FOMC, but 'the FOMC, the Fed's rate-setting committee'). Use a healthy but not "
+        "overloaded number of fun emojis (roughly 8-12 across the body, on-brand: \U0001F9E9 "
+        "\U0001F4C8 \U0001F680 \U0001F440 \U0001F525 \U000026A1 \U0001F30C \U0001F4B0 \U0001F4B9 \U0001F511). "
+        "Keep the whole body under ~130 words. NEVER invent numbers - use only the data "
+        "given. Stay strictly neutral - never promote, recommend, or push any specific "
+        "crypto, and never give buy/sell advice. Do NOT ask questions or invite replies; "
+        "this is a pure snapshot. Use plain hyphens (-), never em-dashes, throughout."
     )
     user = (
         f"Today: {today}. Fear & Greed: {market_blob['fng']['value']} "
@@ -208,31 +186,33 @@ def main():
         ),
         "movers": "",
     }
-    post = call_llm(market, headlines, fng_label)
-    # Guarantee the ==== frame top and bottom, whatever the LLM wrote.
-    post = post.strip("\n").strip()
-    # Normalise spacing: blank line between every paragraph.
+    body = call_llm(market, headlines, fng_label)
+    # Guarantee clean spacing: blank line between every paragraph.
     import re
-    post = re.sub(r"\n{3,}", "\n\n", post)   # collapse 3+ newlines to one blank line
-    post = re.sub(r"([^\n])\n([^\n])", "\1\n\n\2", post)  # ensure single newlines become paragraph breaks
-    # HARD RULE: only Bitcoin and Ethereum may be mentioned. Strip any line that
-    # names or pushes another token (top movers / gainers / fallers / altcoin symbols).
+    body = re.sub(r"\n{3,}", "\n\n", body)
+    body = re.sub(r"([^\n])\n([^\n])", "\1\n\n\2", body)
+    # HARD RULE: only Bitcoin and Ethereum may be mentioned. Drop any line naming
+    # another token (movers / gainers / fallers / altcoin symbols).
     ALT_TOKENS = re.compile(
         r"\b(?:top movers|top gainer|biggest faller|biggest mover|UNI|XLM|HBAR|SOL|DOGE|"
         r"ADA|XRP|BNB|AVAX|LINK|MATIC|POLY|DOT|LTC|TRX|TON|SHIB|PEPE|FIL|ATOM|NEAR|APT|"
         r"ARB|OP|INJ|SUI|SEI|TIA|WIF|BONK|RAIN|BTW|WLFI)\b",
         re.IGNORECASE,
     )
-    filtered_lines = []
-    for ln in post.split("\n"):
-        if ln.strip() and ALT_TOKENS.search(ln):
-            continue  # drop any line mentioning a non-BTC/ETH token or a movers list
-        filtered_lines.append(ln)
-    post = "\n".join(filtered_lines)
-    post = re.sub(r"\n{2,}", "\n\n", post)
-    post = "====\n" + post + "\n===="
+    filtered = [ln for ln in body.split("\n") if not (ln.strip() and ALT_TOKENS.search(ln))]
+    body = "\n".join(filtered)
+    body = re.sub(r"\n{2,}", "\n\n", body)
+    # Build the exact header in code (guaranteed correct - cannot be mangled by the AI).
+    uk_date = datetime.now(ZoneInfo("Europe/London")).strftime("%A %d %B %Y") if (ZoneInfo is not None) else datetime.now().strftime("%A %d %B %Y")
+    header = (
+        "\U0001F680 <b>Today's Crypto News: Plain &amp; Simple</b> \U0001F4C8\n"
+        "Your daily update on the digital markets\n"
+        "Date: " + uk_date
+    )
+    post = "====\n" + header + "\n\n" + body + "\n===="
     msg_id = send_telegram(post)
     print(f"OK sent, message_id={msg_id}")
+
 
 
 if __name__ == "__main__":

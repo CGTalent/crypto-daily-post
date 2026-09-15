@@ -109,7 +109,8 @@ def call_llm(market_blob, headlines, fng_label):
         "neutral and never sound like you are promoting or recommending any specific "
         "crypto or giving buy/sell advice. Do NOT name a single coin as something to "
         "buy, load up on, or chase. The closing line must be market-level, not coin-pushing "
-        "e.g. 'What's the wider market up to this week?' — never 'Are we loading up on X?'."
+        "e.g. 'What's the wider market up to this week?' - never 'Are we loading up on X?'. "
+        "Use plain hyphens (-), never em-dashes (—), throughout the entire post."
     )
     user = (
         f"Today: {today}. Fear & Greed: {market_blob['fng']['value']} "

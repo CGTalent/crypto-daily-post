@@ -208,7 +208,22 @@ def main():
     import re
     post = re.sub(r"\n{3,}", "\n\n", post)   # collapse 3+ newlines to one blank line
     post = re.sub(r"([^\n])\n([^\n])", "\1\n\n\2", post)  # ensure single newlines become paragraph breaks
-    post = "====" + "\n" + post + "\n" + "===="
+    # HARD RULE: only Bitcoin and Ethereum may be mentioned. Strip any line that
+    # names or pushes another token (top movers / gainers / fallers / altcoin symbols).
+    ALT_TOKENS = re.compile(
+        r"\b(?:top movers|top gainer|biggest faller|biggest mover|UNI|XLM|HBAR|SOL|DOGE|"
+        r"ADA|XRP|BNB|AVAX|LINK|MATIC|POLY|DOT|LTC|TRX|TON|SHIB|PEPE|FIL|ATOM|NEAR|APT|"
+        r"ARB|OP|INJ|SUI|SEI|TIA|WIF|BONK|RAIN|BTW|WLFI)\b",
+        re.IGNORECASE,
+    )
+    filtered_lines = []
+    for ln in post.split("\n"):
+        if ln.strip() and ALT_TOKENS.search(ln):
+            continue  # drop any line mentioning a non-BTC/ETH token or a movers list
+        filtered_lines.append(ln)
+    post = "\n".join(filtered_lines)
+    post = re.sub(r"\n{2,}", "\n\n", post)
+    post = "====\n" + post + "\n===="
     msg_id = send_telegram(post)
     print(f"OK sent, message_id={msg_id}")
 

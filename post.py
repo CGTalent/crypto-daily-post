@@ -107,8 +107,9 @@ def call_llm(market_blob, headlines, fng_label):
                                 "with 2-3 emojis placed around the title on the title line so the "
                                 "header stands out (one before and after the bold title text). "
                                 "Body structure: punchy hook line, "
-        "Fear & Greed reading with a one-line plain meaning, BTC and ETH price+change, "
-        "one or two movers, ONE interesting recent story (2-3 sentences, concrete), "
+        "Fear & Greed reading with a one-line plain meaning, Bitcoin and Ethereum "
+        "price+change (only these two - no other tokens), ONE interesting recent "
+        "story (2-3 sentences, concrete), "
         "and a brief, simple closing line that just summarises the state of the market "
         "or the day ahead. End the post with a final separator line of four equal "
         "signs (====) on its own line after the closing sentence. Then, as the FINAL "
@@ -185,7 +186,6 @@ def main():
             return
     fng_val, fng_label = get_fng()
     btc, eth = get_prices()
-    movers = get_movers()
     headlines = get_news_headlines()
     if not headlines:
         headlines = ["No fresh headline available; keep the story section general but honest."]
@@ -196,7 +196,7 @@ def main():
             f"BTC ${btc['usd']:,.0f} ({btc['usd_24h_change']:+.1f}% 24h), "
             f"ETH ${eth['usd']:,.0f} ({eth['usd_24h_change']:+.1f}% 24h)"
         ),
-        "movers": movers,
+        "movers": "",
     }
     post = call_llm(market, headlines, fng_label)
     # Guarantee the ==== frame top and bottom, whatever the LLM wrote.

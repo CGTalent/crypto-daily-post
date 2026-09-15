@@ -92,13 +92,20 @@ def call_llm(market_blob, headlines, fng_label):
     today = datetime.now(timezone.utc).strftime("%A %d %B %Y")
     system = (
         "You are a friendly crypto market commentator writing for Chris Farrell's "
-        "channel. Write ONE post, ready to copy-paste. Plain English, no jargon "
-        "(explain terms briefly). A FEW fun emojis (max ~6, on-brand: \U0001F9E9 \U0001F4C8 "
-        "\U0001F680 \U0001F440 \U0001F525 \U000026A1). Structure: punchy hook line, "
+        "channel. Write ONE post, ready to copy-paste. The post MUST open with this "
+                "exact header on three separate lines (title line, then subhead line, then date line), "
+                "the title in HTML bold:\n"
+                "<b>Crypto Today, Plain &amp; Simple</b>\n"
+                "Your daily update on the digital markets\n"
+                "Date: [today's date, e.g. Monday 15 September 2026]\n"
+                "Follow with a blank line, then the post body. Plain English, no jargon "
+                "(explain terms briefly). A FEW fun emojis (max ~6, on-brand: "
+        "\U0001F680 \U0001F440 \U0001F525 \U000026A1). Body structure: punchy hook line, "
         "Fear & Greed reading with a one-line plain meaning, BTC and ETH price+change, "
         "one or two movers, ONE interesting recent story (2-3 sentences, concrete), "
         "a light closing line or question. Conversational, feels like a friend. Keep under "
-        "~130 words. Never invent numbers; use only the data given. Date-stamp with the day."
+        "~130 words (excluding the header). Never invent numbers; use only the data given. "
+        "Fill in today's date in the Date: header line."
     )
     user = (
         f"Today: {today}. Fear & Greed: {market_blob['fng']['value']} "

@@ -114,14 +114,14 @@ def call_llm(market_blob, headlines, fng_label):
         f"Today: {today}. Fear & Greed: {market_blob['fng']['value']} "
         f"({fng_label}). Bitcoin and Ethereum: {market_blob['prices']}. "
         f"{market_blob['movers']}\n\n"
-        f"LEAD NEWS: THE main news item for today is the US Senate holding a key "
-        f"procedural vote on the CLARITY Act TODAY at 2:15 p.m. Eastern (7:15 p.m. "
-        f"UK time), needing 60 votes to advance. Explain in a sentence or two what "
-        f"the Clarity Act is (a bill to set clear federal rules for crypto) and that "
-        f"today's vote decides whether the Senate can start debating it. Include the "
-        f"time it happens.\n\n"
-        f"Other recent crypto headlines for background (do not feature these if they "
-        f"conflict with the lead news):\n"
+        f"Below are today's fresh crypto news headlines. Pick the SINGLE biggest, most "
+        f"important one for right now, and explain it in simple English in 2-3 sentences so "
+        f"anyone can understand what is happening and why it matters. Use the most recent "
+        f"development about it (not an outdated preview - if a vote or event has already "
+        f"happened, report its RESULT, not that it is 'coming up'). If none of the headlines "
+        f"clearly matters, pick the most consequential one. Do not mention it is 'later today' "
+        f"unless the headlines say it is actually happening today.\n\n"
+        f"Today's headlines:\n"
         + "\n".join(f"- {h}" for h in headlines)
     )
     payload = {

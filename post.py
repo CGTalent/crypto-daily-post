@@ -32,19 +32,34 @@ FNG_URL = "https://api.alternative.me/fng/"
 COINGECKO = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true"
 MOVER_URL = ("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd"
              "&order=market_cap_desc&per_page=40&page=1&price_change_percentage=24h")
-NEWS_URL = "https://www.coindesk.com/arc/outboundfeeds/rss/"
+NEWS_FEEDS = [
+    "https://cointelegraph.com/rss",
+    "https://decrypt.co/feed",
+    "https://www.theblock.co/rss.xml",
+]
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MODEL = "deepseek/deepseek-v4-flash-0731"
 
 
-def http_get(url, timeout=20):
-    req = urllib.request.Request(url, headers={"User-Agent": "crypto-daily-post/1.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.read().decode("utf-8", "replace")
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"GET {url} -> HTTP {e.code}") from e
+def http_get(url, timeout=20, attempts=3):
+    """GET with retries for transient network errors (connection resets etc.)."""
+    last = None
+    for i in range(attempts):
+        req = urllib.request.Request(url, headers={"User-Agent": "crypto-daily-post/1.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            # 4xx (except 429) are permanent - don't retry.
+            if e.code not in (429,) and 400 <= e.code < 500:
+                raise RuntimeError(f"GET {url} -> HTTP {e.code}") from e
+            last = e
+        except Exception as e:  # URLError, ConnectionResetError, timeout, ...
+            last = e
+        if i < attempts - 1:
+            time.sleep(2 * (i + 1))
+    raise RuntimeError(f"GET {url} failed after {attempts} attempts: {last}") from last
 
 
 def get_fng():
@@ -71,24 +86,37 @@ def get_movers():
 
 
 def get_news_headlines(limit=5):
-    """Pull top headlines from CoinDesk RSS (no key needed if parse works)."""
-    try:
-        import re
-        import xml.etree.ElementTree as ET
-        xml = http_get(NEWS_URL, timeout=20)
-        ns = {"m": "http://purl.org/rss/1.0/modules/content/"}
-        titles = ET.fromstring(xml).iter("item")
-        out = []
-        for it in titles:
-            t = it.find("title")
-            if t is not None and t.text:
-                out.append(t.text.strip())
-        return out[:limit]
-    except Exception:
-        return []
+    """Pull top headlines from the first working crypto RSS feed.
+
+    Tries several feeds so a single dead/changed feed can't blank the news
+    section (which is what happened when CoinDesk retired its RSS URL).
+    """
+    import xml.etree.ElementTree as ET
+
+    for url in NEWS_FEEDS:
+        try:
+            xml = http_get(url, timeout=20)
+            titles = ET.fromstring(xml).iter("item")
+            out = []
+            for it in titles:
+                t = it.find("title")
+                if t is not None and t.text and t.text.strip():
+                    out.append(t.text.strip())
+            if out:
+                return out[:limit]
+        except Exception:
+            continue
+    return []
 
 
-def call_llm(market_blob, headlines, fng_label):
+def call_llm(market_blob, headlines, fng_label, attempts=3):
+    """Call OpenRouter and return the post body.
+
+    Retries on transient/empty responses. Some models occasionally return a
+    choice whose message has no `content` (reasoning-only or truncated reply),
+    which used to crash the whole run - we now retry and fall back to the
+    `reasoning` field before giving up.
+    """
     today = datetime.now(timezone.utc).strftime("%A %d %B %Y")
     system = (
         "You are a friendly crypto market commentator writing for Chris Farrell's "
@@ -131,20 +159,43 @@ def call_llm(market_blob, headlines, fng_label):
             {"role": "user", "content": user},
         ],
         "temperature": 0.8,
+        "max_tokens": 2000,
     }
-    req = urllib.request.Request(
-        OPENROUTER_URL,
-        data=json.dumps(payload).encode(),
-        headers={
-            "Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/CGTalent/crypto-daily-post",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=60) as r:
-        d = json.loads(r.read().decode())
-    return d["choices"][0]["message"]["content"].strip()
+    last_err = None
+    for i in range(attempts):
+        try:
+            req = urllib.request.Request(
+                OPENROUTER_URL,
+                data=json.dumps(payload).encode(),
+                headers={
+                    "Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://github.com/CGTalent/crypto-daily-post",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=90) as r:
+                d = json.loads(r.read().decode())
+            if d.get("error"):
+                raise RuntimeError(f"OpenRouter error: {d['error']}")
+            choices = d.get("choices") or []
+            if not choices:
+                raise RuntimeError(f"OpenRouter returned no choices: {str(d)[:200]}")
+            msg = choices[0].get("message") or {}
+            # Only accept the FINAL answer. The model sometimes returns an empty
+            # `content` with the text parked in `reasoning` (its scratchpad) - that
+            # is a failed generation, not a post, so we retry instead of using it.
+            content = (msg.get("content") or "").strip()
+            if not content:
+                finish = choices[0].get("finish_reason")
+                raise RuntimeError(f"empty content (finish_reason={finish})")
+            return content
+        except Exception as e:
+            last_err = e
+            print(f"LLM attempt {i + 1}/{attempts} failed: {e}", file=sys.stderr)
+            if i < attempts - 1:
+                time.sleep(3 * (i + 1))
+    raise RuntimeError(f"LLM call failed after {attempts} attempts: {last_err}") from last_err
 
 
 def send_telegram(text):
@@ -210,6 +261,10 @@ def main():
         "Date: " + uk_date
     )
     post = "====\n" + header + "\n\n" + body + "\n===="
+    if os.environ.get("DRY_RUN") == "1":
+        print("DRY_RUN - not sending. Rendered post:\n")
+        print(post)
+        return
     msg_id = send_telegram(post)
     print(f"OK sent, message_id={msg_id}")
 

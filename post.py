@@ -159,7 +159,9 @@ def call_llm(market_blob, headlines, fng_label, attempts=3):
             {"role": "user", "content": user},
         ],
         "temperature": 0.8,
-        "max_tokens": 2000,
+        # Reasoning models spend part of this budget "thinking" before they write.
+        # Too low and the answer comes back empty with finish_reason=length.
+        "max_tokens": 4000,
     }
     last_err = None
     for i in range(attempts):

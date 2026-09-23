@@ -29,7 +29,8 @@ if hasattr(time, "tzset"):
     time.tzset()
 
 FNG_URL = "https://api.alternative.me/fng/"
-COINGECKO = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true"
+COINGECKO = ("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd"
+             "&ids=bitcoin,ethereum&price_change_percentage=24h,7d")
 MOVER_URL = ("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd"
              "&order=market_cap_desc&per_page=40&page=1&price_change_percentage=24h")
 NEWS_FEEDS = [
@@ -68,8 +69,10 @@ def get_fng():
 
 
 def get_prices():
+    """Return (bitcoin, ethereum) market dicts with 24h and 7d change in USD."""
     d = json.loads(http_get(COINGECKO))
-    return d["bitcoin"], d["ethereum"]
+    by_id = {c["id"]: c for c in d}
+    return by_id["bitcoin"], by_id["ethereum"]
 
 
 def get_movers():
@@ -125,8 +128,10 @@ def call_llm(market_blob, headlines, fng_label, attempts=3):
         "flanking a title. The editor adds the header and frame separately. "
         "Separate each body paragraph with a blank line so the post breathes. "
         "Body structure, in order: (1) a punchy hook line; (2) the Fear and Greed reading "
-        "with a one-line plain-English meaning; (3) Bitcoin and Ethereum price and 24h "
-        "change (ONLY these two - never name any other token/coin); (4) the big story - the "
+        "with a one-line plain-English meaning; (3) Bitcoin and Ethereum price with BOTH their "
+        "24-hour and 7-day change - give both figures for each coin, e.g. 'Bitcoin is at $X, "
+        "up 2.1% in 24 hours and up 13.4% over the past week' (ONLY these two coins - never "
+        "name any other token/coin); (4) the big story - the "
         "most EXCITING development of the day (a big rally, a record high, a major adoption "
         "win), never a dull probe, lawsuit or regulatory story; (5) a brief simple closing line that sums up the overall "
         "market mood, opening with 'That's today's snapshot'. "
@@ -134,7 +139,7 @@ def call_llm(market_blob, headlines, fng_label, attempts=3):
         "FOMC, but 'the FOMC, the Fed's rate-setting committee'). Use a healthy but not "
         "overloaded number of fun emojis (roughly 8-12 across the body, on-brand: \U0001F9E9 "
         "\U0001F4C8 \U0001F680 \U0001F440 \U0001F525 \U000026A1 \U0001F30C \U0001F4B0 \U0001F4B9 \U0001F511). "
-        "Keep the whole body under ~130 words. NEVER invent numbers - use only the data "
+        "Keep the whole body under ~150 words. NEVER invent numbers - use only the data "
         "given. Stay strictly neutral - never promote, recommend, or push any specific "
         "crypto, and never give buy/sell advice. Do NOT ask questions or invite replies; "
         "this is a pure snapshot. Use plain hyphens (-), never em-dashes, throughout."
@@ -243,8 +248,12 @@ def main():
     market = {
         "fng": {"value": fng_val},
         "prices": (
-            f"BTC ${btc['usd']:,.0f} ({btc['usd_24h_change']:+.1f}% 24h), "
-            f"ETH ${eth['usd']:,.0f} ({eth['usd_24h_change']:+.1f}% 24h)"
+            f"BTC ${btc['current_price']:,.0f} "
+            f"({btc['price_change_percentage_24h_in_currency']:+.1f}% 24h, "
+            f"{btc['price_change_percentage_7d_in_currency']:+.1f}% 7d), "
+            f"ETH ${eth['current_price']:,.0f} "
+            f"({eth['price_change_percentage_24h_in_currency']:+.1f}% 24h, "
+            f"{eth['price_change_percentage_7d_in_currency']:+.1f}% 7d)"
         ),
         "movers": "",
     }

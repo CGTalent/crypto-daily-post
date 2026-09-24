@@ -34,6 +34,7 @@ COINGECKO = ("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd"
 MOVER_URL = ("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd"
              "&order=market_cap_desc&per_page=40&page=1&price_change_percentage=24h")
 NEWS_FEEDS = [
+    "https://watcher.guru/news/feed",
     "https://cointelegraph.com/rss",
     "https://decrypt.co/feed",
     "https://www.theblock.co/rss.xml",
@@ -131,9 +132,10 @@ def call_llm(market_blob, headlines, fng_label, attempts=3):
         "with a one-line plain-English meaning; (3) Bitcoin and Ethereum price with BOTH their "
         "24-hour and 7-day change - give both figures for each coin, e.g. 'Bitcoin is at $X, "
         "up 2.1% in 24 hours and up 13.4% over the past week' (ONLY these two coins - never "
-        "name any other token/coin); (4) the big story - the "
-        "most EXCITING development of the day (a big rally, a record high, a major adoption "
-        "win), never a dull probe, lawsuit or regulatory story; (5) a brief simple closing line that sums up the overall "
+        "name any other token/coin); (4) the big story - explain what the MARKET did "
+        "and WHY: what drove today's move (rallies or pullbacks). Focus on market drivers "
+        "(flows, big buyers/sellers, macro, liquidations), never dull product, tech, probe or "
+        "lawsuit stories; (5) a brief simple closing line that sums up the overall "
         "market mood, opening with 'That's today's snapshot'. "
         "Plain English, no jargon; explain any unfamiliar term right there (e.g. not just "
         "FOMC, but 'the FOMC, the Fed's rate-setting committee'). Use a healthy but not "
@@ -148,16 +150,21 @@ def call_llm(market_blob, headlines, fng_label, attempts=3):
         f"Today: {today}. Fear & Greed: {market_blob['fng']['value']} "
         f"({fng_label}). Bitcoin and Ethereum: {market_blob['prices']}. "
         f"{market_blob['movers']}\n\n"
-        f"Below are today's fresh crypto news headlines. Pick the SINGLE most EXCITING one - "
-        f"the story people would actually repeat to a mate. Favour bullish, upbeat, "
-        f"market-moving news: big rallies, record highs, huge inflows, notable adoption, a "
-        f"famous name or big institution getting involved, a breakthrough or a listing. "
-        f"AVOID dull regulatory, legal or enforcement stories (probes, investigations, "
-        f"lawsuits, sanctions, compliance, tax, court cases) unless the news is genuinely "
-        f"enormous - they kill the energy of the post. "
-        f"IMPORTANT: if the day's real excitement IS the market's own move (a big up day, a "
-        f"sharp jump, everything green), then THAT is the story - lead with the rally and how "
-        f"far prices have climbed, rather than a minor headline. "
+        f"Below are today's fresh crypto news headlines. Look FIRST at how the market actually "
+        f"moved over the last 24 hours (data above), then pick the headline that best explains "
+        f"THAT move. If prices pulled back, explain WHY they pulled back; if they rallied, "
+        f"explain what drove the rally. This section must be about the MARKET - what it did and "
+        f"the reason why - not about products, technology or infrastructure. "
+        f"Strong drivers to look for: ETF or institutional flows, big buys or sells, a major "
+        f"liquidation, macro news (rates, inflation, the Fed), a regulatory decision that moved "
+        f"prices, a big exchange or protocol event, or a well-known name entering the market. "
+        f"Do NOT pick abstract product/tech/upgrade stories (new tools, software releases, "
+        f"research or engineering news) - they are dull and readers do not care. "
+        f"AVOID dry legal/regulatory enforcement stories (probes, investigations, lawsuits, "
+        f"sanctions, compliance, tax, court cases) unless they genuinely moved prices. "
+        f"If NO headline clearly explains the move, then simply report what the market did and "
+        f"give the closest real driver from the headlines - NEVER invent a cause that is not "
+        f"in the headlines. "
         f"Explain it in simple English in 2-3 sentences so anyone can understand what is "
         f"happening and why it matters. Use the most recent "
         f"development about it (not an outdated preview - if a vote or event has already "
@@ -241,7 +248,7 @@ def main():
             return
     fng_val, fng_label = get_fng()
     btc, eth = get_prices()
-    headlines = get_news_headlines()
+    headlines = get_news_headlines(8)
     if not headlines:
         headlines = ["No fresh headline available; keep the story section general but honest."]
 

@@ -11,6 +11,7 @@ Secrets are injected via environment variables by the workflow:
 """
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
@@ -29,6 +30,12 @@ if hasattr(time, "tzset"):
     time.tzset()
 
 FNG_URL = "https://api.alternative.me/fng/"
+# Binance is the primary price source: reliable, no key, and returns both coins'
+# 24h change in one call. 7-day change is computed from daily candles.
+BINANCE_TICKER = ("https://api.binance.com/api/v3/ticker/24hr?symbols="
+                  "%5B%22BTCUSDT%22,%22ETHUSDT%22%5D")
+BINANCE_KLINES = "https://api.binance.com/api/v3/klines?symbol={sym}&interval=1d&limit=8"
+# CoinGecko kept as a fallback only - it now rate-limits/blocks intermittently with HTTP 403.
 COINGECKO = ("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd"
              "&ids=bitcoin,ethereum&price_change_percentage=24h,7d")
 MOVER_URL = ("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd"
@@ -53,8 +60,9 @@ def http_get(url, timeout=20, attempts=3):
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 return r.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
-            # 4xx (except 429) are permanent - don't retry.
-            if e.code not in (429,) and 400 <= e.code < 500:
+            # 403 and 429 are usually rate-limiting, not permanent - retry them.
+            # Other 4xx are permanent, so fail fast.
+            if e.code not in (403, 429) and 400 <= e.code < 500:
                 raise RuntimeError(f"GET {url} -> HTTP {e.code}") from e
             last = e
         except Exception as e:  # URLError, ConnectionResetError, timeout, ...
@@ -69,11 +77,50 @@ def get_fng():
     return d.get("value"), d.get("value_classification")
 
 
-def get_prices():
-    """Return (bitcoin, ethereum) market dicts with 24h and 7d change in USD."""
+def _binance_prices():
+    """(bitcoin, ethereum) with price, 24h % and 7d % - primary source."""
+    tick = json.loads(http_get(BINANCE_TICKER))
+    by_sym = {t["symbol"]: t for t in tick}
+    out = {}
+    for sym, key in (("BTCUSDT", "bitcoin"), ("ETHUSDT", "ethereum")):
+        t = by_sym[sym]
+        price = float(t["lastPrice"])
+        pct24 = float(t["priceChangePercent"])
+        candles = json.loads(http_get(BINANCE_KLINES.format(sym=sym)))
+        base = float(candles[0][4])  # close 7 daily candles back
+        out[key] = {
+            "price": price,
+            "pct24h": pct24,
+            "pct7d": (price / base - 1) * 100 if base else None,
+        }
+    return out["bitcoin"], out["ethereum"]
+
+
+def _coingecko_prices():
+    """Fallback source, same normalised shape."""
     d = json.loads(http_get(COINGECKO))
     by_id = {c["id"]: c for c in d}
-    return by_id["bitcoin"], by_id["ethereum"]
+
+    def norm(c):
+        return {
+            "price": float(c["current_price"]),
+            "pct24h": float(c["price_change_percentage_24h_in_currency"]),
+            "pct7d": float(c["price_change_percentage_7d_in_currency"]),
+        }
+
+    return norm(by_id["bitcoin"]), norm(by_id["ethereum"])
+
+
+def get_prices():
+    """Return (bitcoin, ethereum) dicts: {price, pct24h, pct7d}.
+
+    Tries Binance first (reliable, no key), falls back to CoinGecko.
+    """
+    try:
+        return _binance_prices()
+    except Exception as e:
+        print(f"Binance prices failed ({e}); falling back to CoinGecko", file=sys.stderr)
+        return _coingecko_prices()
 
 
 def get_movers():
@@ -89,28 +136,46 @@ def get_movers():
         return "Movers could not be fetched."
 
 
-def get_news_headlines(limit=5):
-    """Pull top headlines from the first working crypto RSS feed.
+CRYPTO_TERMS = re.compile(
+    r"\b(bitcoin|btc|ethereum|ether|eth|crypto|blockchain|stablecoin|altcoin|memecoin|"
+    r"defi|web3|token|binance|coinbase|kraken|okx|bybit|solana|sol|xrp|ripple|dogecoin|"
+    r"doge|cardano|nft|on-chain|satoshi|halving|mining|wallet|custody|digital asset|"
+    r"digital assets|whale|airdrop|layer 2|memecoin)\b",
+    re.IGNORECASE,
+)
 
-    Tries several feeds so a single dead/changed feed can't blank the news
-    section (which is what happened when CoinDesk retired its RSS URL).
+
+def get_news_headlines(limit=5):
+    """Top crypto headlines, merged from every feed.
+
+    Watcher Guru (Chris's preferred, fastest) is general finance, so its headlines
+    are filtered to crypto-only - otherwise stock stories (Nvidia, Google) leak in.
+    Other feeds are already crypto-only. Never again depends on one live feed.
     """
     import xml.etree.ElementTree as ET
 
+    seen, crypto, fallback = set(), [], []
     for url in NEWS_FEEDS:
         try:
             xml = http_get(url, timeout=20)
-            titles = ET.fromstring(xml).iter("item")
-            out = []
-            for it in titles:
-                t = it.find("title")
-                if t is not None and t.text and t.text.strip():
-                    out.append(t.text.strip())
-            if out:
-                return out[:limit]
+            items = list(ET.fromstring(xml).iter("item"))
         except Exception:
             continue
-    return []
+        for it in items:
+            t = it.find("title")
+            if t is None or not t.text:
+                continue
+            title = t.text.strip()
+            if not title or title in seen:
+                continue
+            seen.add(title)
+            (crypto if CRYPTO_TERMS.search(title) else fallback).append(title)
+
+    out = crypto[:limit]
+    # If the crypto feeds gave us nothing at all, don't leave the section blank.
+    if not out:
+        out = fallback[:limit]
+    return out
 
 
 def call_llm(market_blob, headlines, fng_label, attempts=3):
@@ -263,12 +328,10 @@ def main():
     market = {
         "fng": {"value": fng_val},
         "prices": (
-            f"BTC ${btc['current_price']:,.0f} "
-            f"({btc['price_change_percentage_24h_in_currency']:+.1f}% 24h, "
-            f"{btc['price_change_percentage_7d_in_currency']:+.1f}% 7d), "
-            f"ETH ${eth['current_price']:,.0f} "
-            f"({eth['price_change_percentage_24h_in_currency']:+.1f}% 24h, "
-            f"{eth['price_change_percentage_7d_in_currency']:+.1f}% 7d)"
+            f"BTC ${btc['price']:,.0f} "
+            f"({btc['pct24h']:+.1f}% 24h, {btc['pct7d']:+.1f}% 7d), "
+            f"ETH ${eth['price']:,.0f} "
+            f"({eth['pct24h']:+.1f}% 24h, {eth['pct7d']:+.1f}% 7d)"
         ),
         "movers": "",
     }

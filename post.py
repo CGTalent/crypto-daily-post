@@ -30,12 +30,14 @@ if hasattr(time, "tzset"):
     time.tzset()
 
 FNG_URL = "https://api.alternative.me/fng/"
-# Binance is the primary price source: reliable, no key, and returns both coins'
-# 24h change in one call. 7-day change is computed from daily candles.
-BINANCE_TICKER = ("https://api.binance.com/api/v3/ticker/24hr?symbols="
-                  "%5B%22BTCUSDT%22,%22ETHUSDT%22%5D")
-BINANCE_KLINES = "https://api.binance.com/api/v3/klines?symbol={sym}&interval=1d&limit=8"
-# CoinGecko kept as a fallback only - it now rate-limits/blocks intermittently with HTTP 403.
+# Price sources, tried in order. GitHub Actions runners are US-based, so Binance
+# (HTTP 451 in the US) is unusable there, and CoinGecko now 403s intermittently.
+# Coinbase and Kraken are US-accessible and need no API key.
+COINBASE_STATS = "https://api.exchange.coinbase.com/products/{pair}/stats"
+COINBASE_CANDLES = ("https://api.exchange.coinbase.com/products/{pair}/candles"
+                    "?granularity=86400")
+KRAKEN_TICKER = "https://api.kraken.com/0/public/Ticker?pair={pair}"
+KRAKEN_OHLC = "https://api.kraken.com/0/public/OHLC?pair={pair}&interval=1440"
 COINGECKO = ("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd"
              "&ids=bitcoin,ethereum&price_change_percentage=24h,7d")
 MOVER_URL = ("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd"
@@ -77,27 +79,42 @@ def get_fng():
     return d.get("value"), d.get("value_classification")
 
 
-def _binance_prices():
+def _coinbase_prices():
     """(bitcoin, ethereum) with price, 24h % and 7d % - primary source."""
-    tick = json.loads(http_get(BINANCE_TICKER))
-    by_sym = {t["symbol"]: t for t in tick}
     out = {}
-    for sym, key in (("BTCUSDT", "bitcoin"), ("ETHUSDT", "ethereum")):
-        t = by_sym[sym]
-        price = float(t["lastPrice"])
-        pct24 = float(t["priceChangePercent"])
-        candles = json.loads(http_get(BINANCE_KLINES.format(sym=sym)))
-        base = float(candles[0][4])  # close 7 daily candles back
+    for pair, key in (("BTC-USD", "bitcoin"), ("ETH-USD", "ethereum")):
+        s = json.loads(http_get(COINBASE_STATS.format(pair=pair)))
+        last, op = float(s["last"]), float(s["open"])
+        candles = json.loads(http_get(COINBASE_CANDLES.format(pair=pair)))
+        base = float(candles[7][4]) if len(candles) >= 8 else 0
         out[key] = {
-            "price": price,
-            "pct24h": pct24,
-            "pct7d": (price / base - 1) * 100 if base else None,
+            "price": last,
+            "pct24h": (last / op - 1) * 100 if op else None,
+            "pct7d": (last / base - 1) * 100 if base else None,
+        }
+    return out["bitcoin"], out["ethereum"]
+
+
+def _kraken_prices():
+    """Secondary source - same normalised shape."""
+    out = {}
+    for pair, key in (("XBTUSD", "bitcoin"), ("ETHUSD", "ethereum")):
+        t = json.loads(http_get(KRAKEN_TICKER.format(pair=pair)))["result"]
+        row = next(iter(t.values()))
+        last, op = float(row["c"][0]), float(row["o"])
+        ohlc = json.loads(http_get(KRAKEN_OHLC.format(pair=pair))).get("result") or {}
+        series = next((v for k, v in ohlc.items() if k != "last"), [])
+        base = float(series[-8][4]) if len(series) >= 8 else 0
+        out[key] = {
+            "price": last,
+            "pct24h": (last / op - 1) * 100 if op else None,
+            "pct7d": (last / base - 1) * 100 if base else None,
         }
     return out["bitcoin"], out["ethereum"]
 
 
 def _coingecko_prices():
-    """Fallback source, same normalised shape."""
+    """Last-resort source, same normalised shape."""
     d = json.loads(http_get(COINGECKO))
     by_id = {c["id"]: c for c in d}
 
@@ -114,13 +131,19 @@ def _coingecko_prices():
 def get_prices():
     """Return (bitcoin, ethereum) dicts: {price, pct24h, pct7d}.
 
-    Tries Binance first (reliable, no key), falls back to CoinGecko.
+    Tries each source in turn so one provider going down (or geo-blocking the
+    GitHub runner) can never kill the post.
     """
-    try:
-        return _binance_prices()
-    except Exception as e:
-        print(f"Binance prices failed ({e}); falling back to CoinGecko", file=sys.stderr)
-        return _coingecko_prices()
+    errors = []
+    for name, fn in (("Coinbase", _coinbase_prices),
+                     ("Kraken", _kraken_prices),
+                     ("CoinGecko", _coingecko_prices)):
+        try:
+            return fn()
+        except Exception as e:
+            errors.append(f"{name}: {e}")
+            print(f"price source {name} failed ({e})", file=sys.stderr)
+    raise RuntimeError("all price sources failed - " + " | ".join(errors))
 
 
 def get_movers():

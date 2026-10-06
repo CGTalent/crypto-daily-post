@@ -353,6 +353,41 @@ def call_llm(market_blob, headlines, fng_label, attempts=3):
     raise RuntimeError(f"LLM call failed after {attempts} attempts: {last_err}") from last_err
 
 
+def send_as_chris(text, target):
+    """Publish the post through Chris's OWN Telegram account (not the bot).
+
+    This is what makes the post appear in the community as Chris himself. The
+    login lives in TELEGRAM_SESSION (a Telethon StringSession) plus
+    TELEGRAM_API_ID / TELEGRAM_API_HASH. If none are configured we skip
+    quietly so the rest of the job still works.
+    """
+    api_id = os.environ.get("TELEGRAM_API_ID")
+    api_hash = os.environ.get("TELEGRAM_API_HASH")
+    session = os.environ.get("TELEGRAM_SESSION")
+    if not (api_id and api_hash and session):
+        print("no Telegram user session configured - skipping the community post",
+              file=sys.stderr)
+        return None
+
+    import asyncio
+    from telethon import TelegramClient
+    from telethon.sessions import StringSession
+
+    async def go():
+        client = TelegramClient(StringSession(session), int(api_id), api_hash)
+        await client.connect()
+        try:
+            if not await client.is_user_authorized():
+                raise RuntimeError("Telegram user session is not authorised - re-run login.py")
+            entity = "me" if target == "me" else await client.get_entity(target)
+            m = await client.send_message(entity, text, link_preview=False)
+            return m.id
+        finally:
+            await client.disconnect()
+
+    return asyncio.run(go())
+
+
 def send_telegram(text):
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     chat = os.environ["TELEGRAM_CHAT_ID"]
@@ -503,8 +538,16 @@ def main():
         print("DRY_RUN - not sending. Rendered post:\n")
         print(post)
         return
-    msg_id = send_telegram(post)
-    print(f"OK sent, message_id={msg_id}")
+    if os.environ.get("SKIP_DM") != "1":
+        msg_id = send_telegram(post)
+        print(f"OK sent DM, message_id={msg_id}")
+    # Publish it into the community AS CHRIS. If this fails the run fails (so the
+    # watchdog shouts) and the sent-today marker is NOT written, so a later run
+    # today retries the community post rather than skipping the day.
+    if os.environ.get("SKIP_COMMUNITY") != "1":
+        target = os.environ.get("TELEGRAM_TARGET", "locked_money")
+        cmid = send_as_chris(post, target)
+        print(f"OK posted to community as Chris ({target}), message_id={cmid}")
     # Record the send so a later run today can't post a duplicate.
     if not allow_any:
         _write_marker(today_uk)

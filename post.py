@@ -51,6 +51,28 @@ NEWS_FEEDS = [
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MODEL = "deepseek/deepseek-v4-flash-0731"
+
+# Rotating greetings - Chris wrote these himself and we cycle through them one
+# per day, so the post opens with a different (warmer) hello every morning and
+# repeats only after the whole list has been used. Keep his exact wording and
+# emojis; never let the AI near these. Add new ones to the END of the list so
+# the rotation order already published stays the same.
+GREETINGS = [
+    "Hello, Champions! \U0001F3C6",
+    "Hello, Legends! \U0001F31F",
+    "Hello, Superstars! \U00002B50",
+    "Hello, Wonderful People!",
+    "Hello, Dreamers! \U0001F4AD",
+    "Hello, Achievers!",
+    "Hello, Winners! \U0001F947",
+    "Hello, Rockstars! \U0001F3B8",
+    "Hello, Heroes! \U0001F9B8",
+    "Hello, Trailblazers!",
+    "Hello, Adventurers! \U0001F30D",
+    "Hello, Beautiful Humans! \U00002764\U0000FE0F",
+    "Hello, Good Eggs! \U0001F95A",
+]
+SUBLINE = "Here is your daily update - on the digital markets - explained simply!"
 # Repo file recording the last day a post went out (guards against double-posting
 # now that the send window is wider than one hour).
 MARKER_PATH = "state/last_sent.txt"
@@ -460,9 +482,19 @@ def main():
     body = re.sub(r"\n{2,}", "\n\n", body)
     # Build the exact header in code (guaranteed correct - cannot be mangled by the AI).
     uk_date = datetime.now(ZoneInfo("Europe/London")).strftime("%A %d %B %Y") if (ZoneInfo is not None) else datetime.now().strftime("%A %d %B %Y")
+    # Rotate the greeting by calendar day, so every morning opens differently and
+    # the same hello only comes round again once the whole list has been used.
+    # Date-based (not random) so a re-run or a manual trigger can't change it.
+    from datetime import date
+    try:
+        day_index = date.fromisoformat(today_uk).toordinal()
+    except ValueError:
+        day_index = datetime.now(timezone.utc).toordinal()
+    greeting = GREETINGS[day_index % len(GREETINGS)]
     header = (
         "\U0001F680 <b>Today's Crypto News: Plain &amp; Simple</b> \U0001F4C8\n"
-        "Your daily update on the digital markets\n"
+        + greeting + "\n"
+        + SUBLINE + "\n"
         "Date: " + uk_date
     )
     post = "====\n" + header + "\n\n" + body + "\n===="

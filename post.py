@@ -380,7 +380,10 @@ def send_as_chris(text, target):
             if not await client.is_user_authorized():
                 raise RuntimeError("Telegram user session is not authorised - re-run login.py")
             entity = "me" if target == "me" else await client.get_entity(target)
-            m = await client.send_message(entity, text, link_preview=False)
+            # parse_mode="html" so the <b> tags and &amp; render properly - without
+            # it the post shows literal "<b>" tags in the community.
+            m = await client.send_message(entity, text, parse_mode="html",
+                                          link_preview=False)
             return m.id
         finally:
             await client.disconnect()

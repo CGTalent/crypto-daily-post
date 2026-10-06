@@ -491,10 +491,11 @@ def main():
     except ValueError:
         day_index = datetime.now(timezone.utc).toordinal()
     greeting = GREETINGS[day_index % len(GREETINGS)]
+    # Order Chris asked for: the hello comes FIRST, then the title block.
     header = (
+        greeting + "\n"
+        + SUBLINE + "\n\n"
         "\U0001F680 <b>Today's Crypto News: Plain &amp; Simple</b> \U0001F4C8\n"
-        + greeting + "\n"
-        + SUBLINE + "\n"
         "Date: " + uk_date
     )
     post = "====\n" + header + "\n\n" + body + "\n===="

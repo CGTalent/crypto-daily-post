@@ -51,6 +51,9 @@ NEWS_FEEDS = [
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MODEL = "deepseek/deepseek-v4-flash-0731"
+# Repo file recording the last day a post went out (guards against double-posting
+# now that the send window is wider than one hour).
+MARKER_PATH = "state/last_sent.txt"
 
 
 def http_get(url, timeout=20, attempts=3):
@@ -344,15 +347,85 @@ def send_telegram(text):
     return d["result"]["message_id"]
 
 
+def _gh_headers():
+    h = {"Accept": "application/vnd.github+json",
+         "User-Agent": "crypto-daily-post/1.0"}
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if token:
+        h["Authorization"] = f"Bearer {token}"
+    return h
+
+
+def _read_marker():
+    """Read state/last_sent.txt from the repo. Returns (date, sha) or ('', None).
+
+    Fails open: if the read fails we assume 'not sent yet' and post, because a
+    duplicate is far better than a missing post.
+    """
+    import base64
+    repo = os.environ.get("GITHUB_REPOSITORY", "CGTalent/crypto-daily-post")
+    url = f"https://api.github.com/repos/{repo}/contents/{MARKER_PATH}"
+    try:
+        req = urllib.request.Request(url, headers=_gh_headers())
+        with urllib.request.urlopen(req, timeout=20) as r:
+            d = json.loads(r.read().decode())
+        return base64.b64decode(d.get("content") or "").decode().strip(), d.get("sha")
+    except Exception as e:
+        print(f"marker read failed ({e}) - assuming not sent", file=sys.stderr)
+        return "", None
+
+
+def _write_marker(value):
+    """Record that today's post went out. Best-effort - never fatal."""
+    import base64
+    repo = os.environ.get("GITHUB_REPOSITORY", "CGTalent/crypto-daily-post")
+    if not os.environ.get("GITHUB_TOKEN"):
+        print("no GITHUB_TOKEN - cannot record sent marker", file=sys.stderr)
+        return False
+    _, sha = _read_marker()
+    url = f"https://api.github.com/repos/{repo}/contents/{MARKER_PATH}"
+    body = {"message": f"Mark crypto post sent for {value}",
+            "content": base64.b64encode(value.encode()).decode()}
+    if sha:
+        body["sha"] = sha
+    try:
+        req = urllib.request.Request(
+            url, data=json.dumps(body).encode(), headers=_gh_headers(), method="PUT")
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.status in (200, 201)
+    except Exception as e:
+        print(f"marker write failed ({e})", file=sys.stderr)
+        return False
+
+
 def main():
-    # Post only at 07:00 UK time. The workflow fires at 06:00 + 07:00 UTC;
-    # whichever lands on a 07:00 UK hour does the send, so it's DST-safe.
+    # Post at 7 AM UK. The workflow fires at 06:00 + 07:00 UTC; whichever lands
+    # on 07:00 UK does the send, so it's DST-safe.
+    #
+    # GitHub sometimes delays scheduled runs by hours. A narrow "must be exactly
+    # 07:00" gate then silently skips the day with no error at all (this happened
+    # on 2026-10-04: the run fired at 12:22 UK and posted nothing). So instead we
+    # accept any run from 07:00-12:59 UK and use a "sent today" marker, committed
+    # to the repo, to guarantee exactly one post per day.
     allow_any = os.environ.get("ALLOW_ANY_HOUR") == "1"
+    if ZoneInfo is not None:
+        now_uk = datetime.now(ZoneInfo("Europe/London"))
+    else:
+        now_uk = datetime.now()
+    today_uk = now_uk.strftime("%Y-%m-%d")
     if ZoneInfo is not None and not allow_any:
-        uk_hour = datetime.now(ZoneInfo("Europe/London")).hour
-        if uk_hour != 7:
-            print(f"Not 7 AM UK (hour={uk_hour}); skipping.")
+        uk_hour = now_uk.hour
+        if uk_hour < 7:
+            print(f"Too early (hour={uk_hour}); skipping.")
             return
+        if uk_hour > 12:
+            print(f"Too late (hour={uk_hour}); not sending a stale post.")
+            return
+        marker, _ = _read_marker()
+        if marker == today_uk:
+            print(f"Already sent today ({today_uk}); skipping.")
+            return
+        print(f"In window (hour={uk_hour}), not yet sent today - posting.")
     fng_val, fng_label = get_fng()
     btc, eth = get_prices()
     headlines = get_news_headlines(8)
@@ -399,6 +472,9 @@ def main():
         return
     msg_id = send_telegram(post)
     print(f"OK sent, message_id={msg_id}")
+    # Record the send so a later run today can't post a duplicate.
+    if not allow_any:
+        _write_marker(today_uk)
 
 
 

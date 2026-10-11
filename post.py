@@ -557,12 +557,19 @@ def main():
     # Publish it into the community AS CHRIS. If this fails the run fails (so the
     # watchdog shouts) and the sent-today marker is NOT written, so a later run
     # today retries the community post rather than skipping the day.
+    posted_to_community = False
     if os.environ.get("SKIP_COMMUNITY") != "1":
         target = os.environ.get("TELEGRAM_TARGET", "locked_money")
         cmid = send_as_chris(post, target)
         print(f"OK posted to community as Chris ({target}), message_id={cmid}")
-    # Record the send so a later run today can't post a duplicate.
-    if not allow_any:
+        posted_to_community = target == "locked_money"
+    # Record the send so a later run today can't post a duplicate. This must
+    # happen for MANUAL sends too: a manual trigger bypasses the window and the
+    # marker read, so without this a scheduled run that GitHub delivers late on
+    # the same day would post the whole thing again (happened 2026-10-11).
+    # Test runs (TARGET=me) deliberately don't set it - they must never block
+    # the day's real post.
+    if posted_to_community:
         _write_marker(today_uk)
 
 

@@ -468,15 +468,17 @@ def _write_marker(value):
 
 
 def main():
-    # Post at 7 AM UK. The workflow fires at 06:00 + 07:00 UTC; whichever lands
-    # on 07:00 UK does the send, so it's DST-safe.
+    # Post at 7 AM UK. The workflow fires six morning runs (06:07-11:07 UTC);
+    # whichever lands first after 07:00 UK does the send, so it's DST-safe.
     #
     # GitHub delays or outright DROPS scheduled runs (2026-10-11: the 06:00 UTC
-    # slot never ran and the 07:00 UTC slot landed 6h20m late, at 13:21 UK -
-    # just past the old 12:59 cut-off, so the day was silently skipped). So
-    # instead we accept any run from 07:00-18:59 UK and use a "sent today"
-    # marker, committed to the repo, to guarantee exactly one post per day.
-    # Fail-open on purpose: a late post beats a missing post.
+    # slot never ran and the 07:00 UTC slot landed 6h20m late, at 13:21 UK).
+    # Chris's rule (2026-10-11): never publish a late one - a crypto update that
+    # lands in the afternoon reads as stale, so the window is 07:00-12:59 UK and
+    # a run after that posts nothing. Six :07-past-the-hour morning runs exist so
+    # the post lands at 7am; if GitHub drops them all, the watchdog tells Chris
+    # the day was missed and he decides. The sent-today marker still guarantees
+    # exactly one post a day.
     allow_any = os.environ.get("ALLOW_ANY_HOUR") == "1"
     if ZoneInfo is not None:
         now_uk = datetime.now(ZoneInfo("Europe/London"))
@@ -488,8 +490,8 @@ def main():
         if uk_hour < 7:
             print(f"Too early (hour={uk_hour}); skipping.")
             return
-        if uk_hour > 18:
-            print(f"Too late (hour={uk_hour}); not sending a stale post.")
+        if uk_hour > 12:
+            print(f"Past midday UK (hour={uk_hour}); not sending a late post.")
             return
         marker, _ = _read_marker()
         if marker == today_uk:

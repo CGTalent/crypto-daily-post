@@ -2,9 +2,9 @@ name: Daily Crypto Market Post
 
 # Fires hourly at :07 past the hour from 06:00 to 11:00 UTC (off the top of the
 # hour, where GitHub's scheduler is most congested). post.py checks UK local
-# time itself: it posts on the first run that lands at 07:00 UK or later (up to
-# 18:59 UK), so the post goes out at 7 AM UK all year round (DST-safe) AND
-# still goes out if GitHub delays - or drops - one of the scheduled runs.
+# time itself and publishes on the first run that lands between 07:00 and 12:59
+# UK, so the post goes out at 7 AM UK all year round (DST-safe) and never lands
+# in the afternoon.
 #
 # Exactly one post per day is guaranteed by a "sent today" marker committed to
 # state/last_sent.txt - the second run of the day sees the marker and skips.

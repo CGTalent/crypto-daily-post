@@ -471,11 +471,12 @@ def main():
     # Post at 7 AM UK. The workflow fires at 06:00 + 07:00 UTC; whichever lands
     # on 07:00 UK does the send, so it's DST-safe.
     #
-    # GitHub sometimes delays scheduled runs by hours. A narrow "must be exactly
-    # 07:00" gate then silently skips the day with no error at all (this happened
-    # on 2026-10-04: the run fired at 12:22 UK and posted nothing). So instead we
-    # accept any run from 07:00-12:59 UK and use a "sent today" marker, committed
-    # to the repo, to guarantee exactly one post per day.
+    # GitHub delays or outright DROPS scheduled runs (2026-10-11: the 06:00 UTC
+    # slot never ran and the 07:00 UTC slot landed 6h20m late, at 13:21 UK -
+    # just past the old 12:59 cut-off, so the day was silently skipped). So
+    # instead we accept any run from 07:00-18:59 UK and use a "sent today"
+    # marker, committed to the repo, to guarantee exactly one post per day.
+    # Fail-open on purpose: a late post beats a missing post.
     allow_any = os.environ.get("ALLOW_ANY_HOUR") == "1"
     if ZoneInfo is not None:
         now_uk = datetime.now(ZoneInfo("Europe/London"))
@@ -487,7 +488,7 @@ def main():
         if uk_hour < 7:
             print(f"Too early (hour={uk_hour}); skipping.")
             return
-        if uk_hour > 12:
+        if uk_hour > 18:
             print(f"Too late (hour={uk_hour}); not sending a stale post.")
             return
         marker, _ = _read_marker()

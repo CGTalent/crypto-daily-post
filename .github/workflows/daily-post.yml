@@ -1,9 +1,10 @@
 name: Daily Crypto Market Post
 
-# Fires at 06:00 and 07:00 UTC. post.py checks UK local time itself: it posts on
-# the first run that lands at 07:00 UK or later (up to 12:59 UK), so the post
-# goes out at 7 AM UK all year round (DST-safe) AND still goes out if GitHub
-# delays a scheduled run by a few hours.
+# Fires hourly at :07 past the hour from 06:00 to 11:00 UTC (off the top of the
+# hour, where GitHub's scheduler is most congested). post.py checks UK local
+# time itself: it posts on the first run that lands at 07:00 UK or later (up to
+# 18:59 UK), so the post goes out at 7 AM UK all year round (DST-safe) AND
+# still goes out if GitHub delays - or drops - one of the scheduled runs.
 #
 # Exactly one post per day is guaranteed by a "sent today" marker committed to
 # state/last_sent.txt - the second run of the day sees the marker and skips.
@@ -14,7 +15,7 @@ name: Daily Crypto Market Post
 # TELEGRAM_SESSION (a Telethon StringSession created by login.py).
 on:
   schedule:
-    - cron: "0 6,7 * * *"
+    - cron: "7 6,7,8,9,10,11 * * *"
   workflow_dispatch:
     inputs:
       target:

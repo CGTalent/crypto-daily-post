@@ -1,7 +1,11 @@
 name: Daily Crypto Market Post
 
-# Fires hourly at :07 past the hour from 06:00 to 11:00 UTC (off the top of the
-# hour, where GitHub's scheduler is most congested). post.py checks UK local
+# Fires six times an hour from 06:00 to 11:59 UTC (36 attempts a day), always
+# off the top of the hour, where GitHub's scheduler is most congested.
+# GitHub's scheduler is best-effort: since 2026-10-11 it has been dropping or
+# delaying the early slots by 6+ hours, so more attempts = more chances one
+# lands early enough. Skipped runs are cheap (they exit immediately on the
+# sent-today marker). post.py checks UK local
 # time itself and publishes on the first run that lands between 07:00 and 12:59
 # UK, so the post goes out at 7 AM UK all year round (DST-safe) and never lands
 # in the afternoon.
